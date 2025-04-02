@@ -209,6 +209,101 @@ test xmlDeclaration {
     , raw.items);
 }
 
+/// Writes a DOCTYPE declaration.
+/// Asserts that the writer is at the beginning of the document or just after the BOM or XML declaration.
+pub fn doctype(
+    writer: *Writer,
+    name: []const u8,
+    public_id: ?[]const u8,
+    system_id: ?[]const u8,
+    internal_subset: ?[]const u8,
+) anyerror!void {
+    assert(writer.state == .start or writer.state == .after_bom or writer.state == .after_xml_declaration);
+    try writer.write("<!DOCTYPE ");
+    try writer.write(name);
+
+    if (public_id) |pid| {
+        try writer.write(" PUBLIC \"");
+        try writer.attributeText(pid);
+        try writer.write("\" \"");
+        try writer.attributeText(system_id.?);
+        try writer.write("\"");
+    } else if (system_id) |sid| {
+        try writer.write(" SYSTEM \"");
+        try writer.attributeText(sid);
+        try writer.write("\"");
+    }
+
+    if (internal_subset) |subset| {
+        try writer.write(" [");
+        try writer.write(subset);
+        try writer.write("]");
+    }
+
+    try writer.write(">");
+    if (writer.options.indent.len > 0) try writer.newLineAndIndent();
+    writer.state = .after_xml_declaration;
+}
+
+test doctype {
+    var raw = std.ArrayList(u8).init(std.testing.allocator);
+    defer raw.deinit();
+    const out = xml.streamingOutput(raw.writer());
+    var writer = out.writer(std.testing.allocator, .{ .indent = "  " });
+    defer writer.deinit();
+
+    try writer.doctype("html", null, null, null);
+    try writer.elementStart("html");
+    try writer.elementEndEmpty();
+    try writer.eof();
+
+    try expectEqualStrings(
+        \\<!DOCTYPE html>
+        \\<html/>
+        \\
+    , raw.items);
+
+    raw.clearRetainingCapacity();
+    var writer2 = out.writer(std.testing.allocator, .{ .indent = "  " });
+    defer writer2.deinit();
+
+    try writer2.doctype(
+        "html",
+        "-//W3C//DTD XHTML 1.0 Strict//EN",
+        "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd",
+        null,
+    );
+    try writer2.elementStart("html");
+    try writer2.elementEndEmpty();
+    try writer2.eof();
+
+    try expectEqualStrings(
+        \\<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+        \\<html/>
+        \\
+    , raw.items);
+
+    raw.clearRetainingCapacity();
+    var writer3 = out.writer(std.testing.allocator, .{ .indent = "  " });
+    defer writer3.deinit();
+    try writer3.doctype(
+        "custom",
+        null,
+        null,
+        "<!ENTITY copy \"&#169;\">\n  <!ENTITY trade \"&#8482;\">",
+    );
+    try writer3.elementStart("root");
+    try writer3.elementEndEmpty();
+    try writer3.eof();
+
+    try expectEqualStrings(
+        \\<!DOCTYPE custom [<!ENTITY copy "&#169;">
+        \\  <!ENTITY trade "&#8482;">]>
+        \\<root/>
+        \\
+    , raw.items);
+}
+
 /// Starts an element.
 /// Asserts that the writer is not after the end of the root element.
 pub fn elementStart(writer: *Writer, name: []const u8) anyerror!void {

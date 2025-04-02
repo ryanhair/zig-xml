@@ -673,6 +673,17 @@ pub fn GenericWriter(comptime SinkError: type) type {
         // TODO: not all the write functions actually need to allocate
         pub const WriteError = Writer.WriteError || SinkError || Allocator.Error;
 
+        /// See `Writer.doctype`.
+        pub inline fn doctype(
+            writer: *@This(),
+            name: []const u8,
+            public_id: ?[]const u8,
+            system_id: ?[]const u8,
+            internal_subset: ?[]const u8,
+        ) WriteError!void {
+            return @errorCast(writer.writer.doctype(name, public_id, system_id, internal_subset));
+        }
+
         /// See `Writer.eof`.
         pub inline fn eof(writer: *@This()) WriteError!void {
             return @errorCast(writer.writer.eof());
